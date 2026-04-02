@@ -1,0 +1,16 @@
+# 학습/검증 데이터 경로 (로컬 테스트이므로 train과 val을 똑같이 둡니다)
+train: /proxy_dataset/images/train
+val: /proxy_dataset/images/val
+
+# 클래스 수
+nc: 7
+
+# 클래스 이름 (위의 파이썬 스크립트 CLASS_MAP 번호에 맞춤)
+names:
+  0: Pedestrian
+  1: Two-wheel Vehicle
+  2: Kickboard
+  3: Car
+  4: Truck_Bus
+  5: Traffic_Light
+  6: Traffic_Sign
