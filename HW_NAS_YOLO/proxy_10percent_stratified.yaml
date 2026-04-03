@@ -1,4 +1,3 @@
-# 학습/검증 데이터 경로 (로컬 테스트이므로 train과 val을 똑같이 둡니다)
 train: /proxy_dataset/images/train
 val: /proxy_dataset/images/val
 
