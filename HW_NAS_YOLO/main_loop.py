@@ -1,3 +1,6 @@
+import os
+import uuid
+import yaml
 import time
 import json
 import logging
@@ -5,8 +8,10 @@ import sqlite3
 import numpy as np
 import random
 import torch
+import gc
 
-from architecture_decoder import GenomeDecoder
+from ultralytics import YOLO
+from architecture_decoder import GenomeDecoder, WeightSurgeon
 from latency_predictor import LatencyPredictor
 from multi_fidelity_evaluator import MultiFidelityEvaluator
 from evolution_engine import NSGA2Engine, GenomeOptimizer
@@ -95,17 +100,78 @@ class SQLiteGenomeCache:
         return 0, None, None
 
 
-def measure_trt_latency_sim(genome: list) -> float:
-    time.sleep(0.5) 
-    return float(np.random.uniform(5.0, 30.0))
+def measure_real_trt_latency(genome: list, nc: int = 7) -> float:
+    """Blackwell 환경을 위한 실제 TensorRT FP16 지연 시간 측정"""
+    temp_yaml = f"temp_trt_arch_{uuid.uuid4().hex}.yaml"
+    
+    try:
+        # 1. 아키텍처 디코딩 및 가중치 수술
+        decoder = GenomeDecoder(num_classes=nc)
+        cfg, layer_map, _ = decoder.decode(genome)
+        surgeon = WeightSurgeon(pretrained_path="yolo11n.pt")
+        custom_model = surgeon.transplant(cfg, layer_map)
+
+        with open(temp_yaml, 'w') as f:
+            yaml.dump(cfg, f)
+
+        # 2. YOLO 엔진 로드
+        yolo_engine = YOLO(temp_yaml, task='detect')
+        yolo_engine.model.load_state_dict(custom_model.state_dict())
+
+        # 3. TensorRT FP16 포맷으로 Export (변환)
+        engine_path = yolo_engine.export(format='engine', half=True, workspace=8, verbose=False)
+
+        # 4. TRT 모델 로드 및 Warm-up (예열)
+        trt_model = YOLO(engine_path, task='detect')
+        dummy_input = torch.zeros((1, 3, 640, 640), device='cuda', dtype=torch.float16)
+
+        # 예열 20회로 최적화
+        for _ in range(20):
+            trt_model(dummy_input, verbose=False)
+
+        # 5. 실제 지연 시간 실측 (50회 평균)
+        latencies = []
+        for _ in range(50):
+            torch.cuda.synchronize() # 정확한 실측을 위한 동기화
+            start_time = time.perf_counter()
+            
+            trt_model(dummy_input, verbose=False)
+            
+            torch.cuda.synchronize()
+            latencies.append((time.perf_counter() - start_time) * 1000.0)
+
+        avg_latency = float(np.mean(latencies))
+        
+        # 엔진 객체 삭제
+        del trt_model
+        
+        return avg_latency
+
+    except Exception as e:
+        logger.error(f"🚨 TRT Measurement Failed: {e}")
+        return 100.0 # 파레토 왜곡 방지를 위한 합리적 페널티
+        
+    finally:
+        # 생성된 임시 파일들 청소
+        if 'surgeon' in locals():
+            surgeon.cleanup()
+        for ext in ['.yaml', '.engine', '.onnx']:
+            file_to_remove = temp_yaml.replace('.yaml', ext)
+            if os.path.exists(file_to_remove):
+                os.remove(file_to_remove)
+                
+        # [핵심] 완벽한 메모리 누수 방지 (OOM 예방)
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 def main():
-    logger.info("🚀 Starting Autonomous HW-NAS Production Pipeline 🚀")
+    logger.info("🚀 Starting Autonomous HW-NAS Production Pipeline (Blackwell) 🚀")
     set_seed(42) 
     
-    MAX_GENERATIONS = 30
-    POP_SIZE = 30
+    # [블랙웰 스케일업] 최대 세대 및 개체군 크기 확대
+    MAX_GENERATIONS = 50
+    POP_SIZE = 50
     ACTIVE_LEARNING_RATIO = 20 
     WARMUP_GENERATIONS = 2 # Surrogate 모델 안정화를 위한 Warm-up 기간
     
@@ -117,6 +183,23 @@ def main():
     
     start_gen, saved_population, status = db.load_state()
     
+    # [새로 추가된 로직] Predictor(Replay Buffer) 생존 복구 로직
+    if start_gen > 0:
+        logger.info("🔄 Restoring Predictor Replay Buffer from Database...")
+        past_evals = db.get_all_evaluated()
+        recovery_genomes = []
+        recovery_latencies = []
+        
+        for record in past_evals:
+            # 실측된 지연 시간(actual_latency)이 있는 경우만 수집
+            if record['actual_latency'] > 0:
+                recovery_genomes.append(record['genome'])
+                recovery_latencies.append(record['actual_latency'])
+                
+        if recovery_genomes:
+            predictor.calibrate(recovery_genomes, recovery_latencies, start_gen)
+            logger.info(f"✅ Predictor successfully restored with {len(recovery_genomes)} past TRT samples!")
+
     if status == "completed":
         start_gen += 1
         saved_population = None
@@ -169,7 +252,9 @@ def main():
                 reason = "Warm-up" if gen < WARMUP_GENERATIONS else ("Threshold" if unc >= dynamic_threshold else "Floor Guarantee")
                 logger.info(f"TRT Fallback Triggered ({reason}) -> Unc: {unc:.4f}")
                 
-                actual_latency = measure_trt_latency_sim(genome)
+                # 진짜 TensorRT 실측 함수 호출 (nc=7 동기화)
+                actual_latency = measure_real_trt_latency(genome, nc=7)
+                
                 trt_measured_genomes.append(genome)
                 trt_measured_latencies.append(actual_latency)
                 
