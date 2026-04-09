@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class RayProxyTrainer:
     def __init__(self, data_yaml="proxy_10percent_stratified.yaml"):
         self.data_yaml = data_yaml
-        self.decoder = GenomeDecoder(num_classes=10)
+        self.decoder = GenomeDecoder(num_classes=7)
         self.surgeon = WeightSurgeon(pretrained_path="yolo11n.pt")
 
     def train_and_eval(self, genome: list, epochs: int):
