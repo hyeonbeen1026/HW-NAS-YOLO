@@ -11,6 +11,7 @@ import torch
 import gc
 
 from ultralytics import YOLO
+from ultralytics.nn.autobackend import AutoBackend  # [추가됨] 순수 TRT 측정을 위한 코어 백엔드
 from architecture_decoder import GenomeDecoder, WeightSurgeon
 from latency_predictor import LatencyPredictor
 from multi_fidelity_evaluator import MultiFidelityEvaluator
@@ -101,7 +102,7 @@ class SQLiteGenomeCache:
 
 
 def measure_real_trt_latency(genome: list, nc: int = 7) -> float:
-    """Blackwell 환경을 위한 실제 TensorRT FP16 지연 시간 측정"""
+    """Blackwell/RTX 환경을 위한 실제 TensorRT FP16 지연 시간 측정 (AutoBackend 적용)"""
     temp_yaml = f"temp_trt_arch_{uuid.uuid4().hex}.yaml"
     
     try:
@@ -122,20 +123,22 @@ def measure_real_trt_latency(genome: list, nc: int = 7) -> float:
         engine_path = yolo_engine.export(format='engine', half=True, workspace=8, verbose=False)
 
         # 4. TRT 모델 로드 및 Warm-up (예열)
-        trt_model = YOLO(engine_path, task='detect')
+        # [수정됨] YOLO wrapper 대신 AutoBackend를 사용하여 PyTorch Fallback 에러 원천 차단
+        trt_model = AutoBackend(engine_path, device=torch.device('cuda'), fp16=True)
+        trt_model.eval()
         dummy_input = torch.zeros((1, 3, 640, 640), device='cuda', dtype=torch.float16)
 
         # 예열 20회로 최적화
         for _ in range(20):
-            trt_model(dummy_input, verbose=False)
+            trt_model(dummy_input)
 
-        # 5. 실제 지연 시간 실측 (50회 평균)
+        # 5. 실제 지연 시간 실측 (50회 평균) - 순수 NPU 추론 시간만 측정
         latencies = []
         for _ in range(50):
             torch.cuda.synchronize() # 정확한 실측을 위한 동기화
             start_time = time.perf_counter()
             
-            trt_model(dummy_input, verbose=False)
+            trt_model(dummy_input)
             
             torch.cuda.synchronize()
             latencies.append((time.perf_counter() - start_time) * 1000.0)
@@ -166,10 +169,10 @@ def measure_real_trt_latency(genome: list, nc: int = 7) -> float:
 
 
 def main():
-    logger.info("🚀 Starting Autonomous HW-NAS Production Pipeline (Blackwell) 🚀")
+    logger.info("🚀 Starting Autonomous HW-NAS Production Pipeline 🚀")
     set_seed(42) 
     
-    # [블랙웰 스케일업] 최대 세대 및 개체군 크기 확대
+    # [설정] 최대 세대 및 개체군 크기 
     MAX_GENERATIONS = 50
     POP_SIZE = 50
     ACTIVE_LEARNING_RATIO = 20 
@@ -183,7 +186,7 @@ def main():
     
     start_gen, saved_population, status = db.load_state()
     
-    # [새로 추가된 로직] Predictor(Replay Buffer) 생존 복구 로직
+    # [핵심 로직 검증] Predictor(Replay Buffer) 기반 Active Learning 복구 로직 (논문 기조 완벽 일치)
     if start_gen > 0:
         logger.info("🔄 Restoring Predictor Replay Buffer from Database...")
         past_evals = db.get_all_evaluated()
@@ -247,7 +250,7 @@ def main():
             pred_lat = pred_latencies[i]
             unc = uncertainties[i]
             
-            # Warm-up 기간 내이거나 Uncertainty 임계치 초과 시 실제 지연 시간 측정
+            # Warm-up 기간 내이거나 Uncertainty 임계치 초과 시 실제 지연 시간 측정 (논문 Active Learning 전략)
             if gen < WARMUP_GENERATIONS or unc >= dynamic_threshold or i in top_unc_indices:
                 reason = "Warm-up" if gen < WARMUP_GENERATIONS else ("Threshold" if unc >= dynamic_threshold else "Floor Guarantee")
                 logger.info(f"TRT Fallback Triggered ({reason}) -> Unc: {unc:.4f}")
