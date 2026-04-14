@@ -38,9 +38,20 @@ class RayProxyTrainer:
                 yolo_engine = YOLO(temp_yaml, task='detect')
                 yolo_engine.model.load_state_dict(custom_pytorch_model.state_dict())
 
+                # [수정됨] 데스크탑 한계 돌파 세팅 및 pretrained=False 추가
                 results = yolo_engine.train(
-                    data=self.data_yaml, epochs=epochs, imgsz=640,
-                    batch=16, amp=True, verbose=False, save=False, plots=False
+                    data=self.data_yaml, 
+                    epochs=epochs, 
+                    imgsz=640,
+                    batch=64, 
+                    workers=8,
+                    device=0,       
+                    amp=True,
+                    verbose=False, 
+                    save=False, 
+                    plots=False,
+                    project="runs/nas_proxy",
+                    pretrained=False
                 )
                 
                 mAP_50_95 = results.box.map
