@@ -54,7 +54,7 @@ class GenomeDecoder:
     ATTN_MAP = {0: None, 1: 'CBAM', 2: 'SE'}
     MUTABLE_INDICES = [4, 6, 8, 12] 
     
-    def __init__(self, num_classes=10):
+    def __init__(self, num_classes=7):
         self.num_classes = num_classes
         self.base_cfg = {'nc': self.num_classes, 'scales': {'n': [0.33, 0.25, 1024]}}
         self.original_split_idx = 10 
@@ -127,12 +127,27 @@ class GenomeDecoder:
                     new_map[old_i] = new_i + 1 if new_i >= insert_idx else new_i
                 self.layer_map = new_map
                 
+                # [완벽 수정됨] 동적 라우팅 꼬임(Dead End) 방지 로직
                 for j in range(insert_idx + 1, len(layers)):
                     f_idx = layers[j][0]
-                    if isinstance(f_idx, int) and f_idx >= insert_idx:
-                        layers[j][0] = f_idx + 1
+                    if isinstance(f_idx, int):
+                        if f_idx == target_idx:
+                            layers[j][0] = insert_idx  # 이전 타겟을 보던 레이어를 새로 생긴 어텐션으로 연결
+                        elif f_idx >= insert_idx:
+                            layers[j][0] = f_idx + 1   # 뒤로 밀린 레이어 번호 동기화
                     elif isinstance(f_idx, list):
-                        layers[j][0] = [x + 1 if (isinstance(x, int) and x >= insert_idx) else x for x in f_idx]
+                        new_f = []
+                        for x in f_idx:
+                            if isinstance(x, int):
+                                if x == target_idx:
+                                    new_f.append(insert_idx)
+                                elif x >= insert_idx:
+                                    new_f.append(x + 1)
+                                else:
+                                    new_f.append(x)
+                            else:
+                                new_f.append(x)
+                        layers[j][0] = new_f
 
         # Detect Head 동적 라우팅
         tag_to_idx = {}
