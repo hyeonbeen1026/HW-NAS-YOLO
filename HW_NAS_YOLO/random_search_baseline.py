@@ -5,7 +5,7 @@ from architecture_decoder import GenomeDecoder
 from multi_fidelity_evaluator import MultiFidelityEvaluator
 from latency_predictor import LatencyPredictor
 from evolution_engine import GenomeOptimizer
-from main_loop import set_seed, measure_trt_latency_sim
+from main_loop import set_seed, measure_real_trt_latency
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - [RANDOM] - %(message)s')
 logger = logging.getLogger(__name__)
@@ -25,29 +25,23 @@ def main_random_search_fair_baseline():
                     (genome_str TEXT PRIMARY KEY, mAP REAL, slope REAL, latency REAL, generation INTEGER)''')
     
     optimizer = GenomeOptimizer()
-    evaluator = MultiFidelityEvaluator(num_workers=8)
+    evaluator = MultiFidelityEvaluator(num_workers=1)
     predictor = LatencyPredictor(n_estimators=100)
     
     gen = 0
     while current_cost < TARGET_BUDGET_COST:
         logger.info(f"--- Random Batch Gen {gen} (Cost: {current_cost:.1f}/{TARGET_BUDGET_COST}) ---")
-        
-        candidates = []
-        while len(candidates) < BATCH_SIZE:
-            g = optimizer.generate_random_genome()
-            cursor = conn.execute("SELECT 1 FROM evaluated_genomes WHERE genome_str=?", (str(g),))
-            if cursor.fetchone() is None:
-                candidates.append(g)
-                
+        candidates = [optimizer.generate_random_genome() for _ in range(BATCH_SIZE)]
+
         pred_latencies, uncertainties = predictor.predict_batch(candidates)
         dynamic_threshold = np.percentile(uncertainties, 80) if gen > 1 else 0.0
-        
+
         genomes_to_eval = []
         trt_measured_genomes, trt_measured_latencies = [], []
         
         for i, genome in enumerate(candidates):
             if gen < 2 or uncertainties[i] >= dynamic_threshold:
-                actual_latency = measure_trt_latency_sim(genome)
+                actual_latency = measure_real_trt_latency(genome, nc=7)
                 trt_measured_genomes.append(genome)
                 trt_measured_latencies.append(actual_latency)
                 genomes_to_eval.append({'genome': genome, 'latency': actual_latency})
@@ -67,7 +61,7 @@ def main_random_search_fair_baseline():
                 g = res['genome']
                 match_item = next(item for item in genomes_to_eval if item['genome'] == g)
                 conn.execute(
-                    "INSERT INTO evaluated_genomes (genome_str, mAP, slope, latency, generation) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT OR REPLACE INTO evaluated_genomes (genome_str, mAP, slope, latency, generation) VALUES (?, ?, ?, ?, ?)",
                     (str(g), res['mAP'], res['slope'], match_item['latency'], gen)
                 )
         
