@@ -173,14 +173,14 @@ def main():
     set_seed(42) 
     
     # [설정] 최대 세대 및 개체군 크기 
-    MAX_GENERATIONS = 50
-    POP_SIZE = 50
+    MAX_GENERATIONS = 20
+    POP_SIZE = 20
     ACTIVE_LEARNING_RATIO = 20 
     WARMUP_GENERATIONS = 2 # Surrogate 모델 안정화를 위한 Warm-up 기간
     
     db = SQLiteGenomeCache()
     predictor = LatencyPredictor(n_estimators=100) 
-    evaluator = MultiFidelityEvaluator(num_workers=8)
+    evaluator = MultiFidelityEvaluator(num_workers=1)
     engine = NSGA2Engine(pop_size=POP_SIZE, max_gen=MAX_GENERATIONS)
     optimizer = GenomeOptimizer()
     
