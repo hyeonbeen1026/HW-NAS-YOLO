@@ -43,9 +43,7 @@ class GenomeFeatureExtractor:
             early_depth, heavy_depth,
             early_ghost, heavy_ghost,
             early_attn, heavy_attn,
-            # 고해상도 구간 Attention 피처
             early_depth * early_attn, 
-            # 저해상도 구간 GhostConv 피처
             heavy_ghost / (heavy_depth + 1e-5),
             total_depth,
             (early_attn + heavy_attn) 
@@ -55,41 +53,22 @@ class GenomeFeatureExtractor:
 
 
 class ReplayBuffer:
-    """
-    데이터 분포 붕괴를 방지하는 Replay Buffer.
-    과거의 다양한 구조(Random)와 최근의 우수한 구조(Elite)를 혼합 샘플링합니다.
-    """
     def __init__(self, max_size=3000):
         self.max_size = max_size
-        self.data = [] 
-        self.current_gen = 0
+        self.data = []
 
-    def add(self, features_list, latencies_list, generation):
-        self.current_gen = generation
-        for f, l in zip(features_list, latencies_list):
-            self.data.append((f, l, generation))
-            
+    def add(self, X_batch, y_batch, gen):
+        for x, y in zip(X_batch, y_batch):
+            self.data.append((x, y, gen))
         if len(self.data) > self.max_size:
-            random.shuffle(self.data)
-            self.data = self.data[:self.max_size]
+            self.data = self.data[-self.max_size:]
 
-    def sample_balanced(self) -> tuple:
-        if self.current_gen < 5:
-            return zip(*[(d[0], d[1]) for d in self.data])
-            
-        early = [d for d in self.data if d[2] <= self.current_gen * 0.3]
-        recent = [d for d in self.data if d[2] >= self.current_gen * 0.8]
-        mid = [d for d in self.data if d not in early and d not in recent]
+    def sample_balanced(self):
+        sample_size = min(len(self.data), 1000)
+        sampled = random.sample(self.data, sample_size)
         
-        sampled = []
-        sampled.extend(random.sample(early, min(len(early), 400)))
-        sampled.extend(random.sample(mid, min(len(mid), 300)))
-        sampled.extend(random.sample(recent, min(len(recent), 300)))
-        
-        random.shuffle(sampled) 
         X, y = zip(*[(d[0], d[1]) for d in sampled])
         return np.array(X), np.array(y)
-
 
 class LatencyPredictor:
     def __init__(self, n_estimators=100, random_state=42):
