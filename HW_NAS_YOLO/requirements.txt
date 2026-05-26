@@ -6,10 +6,9 @@ ultralytics==8.3.160
 ray==2.54.1
 pandas==2.3.0
 numpy==1.26.4
-matplotlib==3.5.1
+matplotlib>=3.7.0
 seaborn==0.13.2
 scikit-learn==1.7.1
-PyYAML==5.4.1
+PyYAML==6.0.1
 tensorrt>=10.0.1
 onnx>=1.12.0
-onnxsim>=0.4.33
