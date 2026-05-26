@@ -15,9 +15,9 @@ def main_random_search_fair_baseline():
     set_seed(777) 
     
     # 가상 탐색 예산(Cost) 제어
-    TARGET_BUDGET_COST = 5000.0 
+    TARGET_BUDGET_COST = 2000.0 
     current_cost = 0.0
-    BATCH_SIZE = 30
+    BATCH_SIZE = 10
     
     conn = sqlite3.connect("random_search_cache.db", isolation_level=None, check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL;")
