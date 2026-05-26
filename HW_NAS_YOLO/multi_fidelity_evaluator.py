@@ -43,15 +43,16 @@ class RayProxyTrainer:
                     data=self.data_yaml, 
                     epochs=epochs, 
                     imgsz=640,
-                    batch=64, 
-                    workers=8,
-                    device=0,       
-                    amp=True,
+                    batch=48, 
+                    workers=0,           # CPU 병목 방지
+                    device=0,            # 3070 강제 할당
+                    cache=True,
+                    amp=True, 
                     verbose=False, 
                     save=False, 
                     plots=False,
                     project="runs/nas_proxy",
-                    pretrained=False
+                    pretrained=False     # 🔥 YOLO의 가중치 강제 덮어쓰기 방지
                 )
                 
                 mAP_50_95 = results.box.map
@@ -109,27 +110,67 @@ class MultiFidelityEvaluator:
         self.workers = [RayProxyTrainer.remote() for _ in range(num_workers)]
 
     def evaluate_population(self, population: list):
+        import json
+        import os
         logger.info(f"Starting Multi-Fidelity Evaluation for {len(population)} models")
         
+        checkpoint_file = "multi_fidelity_checkpoint.json"
+        
+        # 1. 기존에 진행 중이던 체크포인트가 있으면 복구
+        if os.path.exists(checkpoint_file):
+            with open(checkpoint_file, 'r') as f:
+                cache = json.load(f)
+            logger.info("🔄 Found intermediate checkpoint! Resuming evaluation...")
+        else:
+            cache = {}
+
+        # ---------------------------------------------------------
         # Stage 1: 3 Epochs
-        results_stage1 = self._run_parallel_async(population, epochs=3)
-        scored_stage1 = self._score_and_sort(results_stage1, alpha=0.5)
+        # ---------------------------------------------------------
+        if 'stage1' in cache:
+            logger.info("⏩ Skipping Stage 1 (Loaded from checkpoint)")
+            scored_stage1 = cache['stage1']
+        else:
+            results_stage1 = self._run_parallel_async(population, epochs=3)
+            scored_stage1 = self._score_and_sort(results_stage1, alpha=0.5)
+            
+            # Stage 1 완료 후 체크포인트 저장
+            cache['stage1'] = scored_stage1
+            with open(checkpoint_file, 'w') as f: json.dump(cache, f)
 
         map_3e_records = {tuple(item['genome']): item['mAP'] for item in scored_stage1}
-
         stage2_pop = [item['genome'] for item in scored_stage1[:max(1, len(scored_stage1)//2)]]
 
+        # ---------------------------------------------------------
         # Stage 2: 15 Epochs
-        results_stage2 = self._run_parallel_async(stage2_pop, epochs=15)
-        scored_stage2 = self._score_and_sort(results_stage2, alpha=1.0) 
+        # ---------------------------------------------------------
+        if 'stage2' in cache:
+            logger.info("⏩ Skipping Stage 2 (Loaded from checkpoint)")
+            scored_stage2 = cache['stage2']
+        else:
+            results_stage2 = self._run_parallel_async(stage2_pop, epochs=15)
+            scored_stage2 = self._score_and_sort(results_stage2, alpha=1.0) 
+            
+            # Stage 2 완료 후 체크포인트 저장
+            cache['stage2'] = scored_stage2
+            with open(checkpoint_file, 'w') as f: json.dump(cache, f)
+
         stage3_pop = [item['genome'] for item in scored_stage2[:max(1, len(scored_stage2)//2)]]
 
+        # ---------------------------------------------------------
         # Stage 3: 50 Epochs
+        # ---------------------------------------------------------
         results_stage3 = self._run_parallel_async(stage3_pop, epochs=50)
         final_scored = self._score_and_sort(results_stage3, alpha=0.2)
 
         for item in final_scored:
             item['mAP_3e'] = map_3e_records.get(tuple(item['genome']), 0.0)
+
+        # ---------------------------------------------------------
+        # 세대 평가 완료 시 임시 체크포인트 파일 삭제
+        # ---------------------------------------------------------
+        if os.path.exists(checkpoint_file):
+            os.remove(checkpoint_file)
 
         return final_scored
 
