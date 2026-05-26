@@ -43,7 +43,9 @@ class GenomeFeatureExtractor:
             early_depth, heavy_depth,
             early_ghost, heavy_ghost,
             early_attn, heavy_attn,
+            # 고해상도 구간 Attention 피처
             early_depth * early_attn, 
+            # 저해상도 구간 GhostConv 피처
             heavy_ghost / (heavy_depth + 1e-5),
             total_depth,
             (early_attn + heavy_attn) 
@@ -61,9 +63,11 @@ class ReplayBuffer:
         for x, y in zip(X_batch, y_batch):
             self.data.append((x, y, gen))
         if len(self.data) > self.max_size:
+            # 버퍼가 꽉 차면 가장 오래된 데이터를 밀어내고 최신 데이터를 유지
             self.data = self.data[-self.max_size:]
 
     def sample_balanced(self):
+        # [완벽 수정됨] Numpy 배열 비교(in)로 인한 ValueError 원천 차단
         sample_size = min(len(self.data), 1000)
         sampled = random.sample(self.data, sample_size)
         
