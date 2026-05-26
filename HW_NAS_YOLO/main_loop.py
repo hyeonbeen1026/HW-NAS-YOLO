@@ -173,7 +173,7 @@ def main():
     set_seed(42) 
     
     # [설정] 최대 세대 및 개체군 크기 
-    MAX_GENERATIONS = 20
+    MAX_GENERATIONS = 25
     POP_SIZE = 20
     ACTIVE_LEARNING_RATIO = 20 
     WARMUP_GENERATIONS = 2 # Surrogate 모델 안정화를 위한 Warm-up 기간
