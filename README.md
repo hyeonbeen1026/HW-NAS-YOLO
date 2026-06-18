@@ -2,9 +2,9 @@
 
 **Hardware-Aware Asynchronous Multi-Objective NAS Pipeline for Autonomous Driving**
 
-본 연구는 자율주행과 같이 소형 객체 비중이 높고 실시간 제약이 강한 엣지(Edge) 환경에서, 객체 탐지 모델의 **정확도(mAP)와 지연 시간(Latency) 간의 최적 파레토 균형(Pareto Optimal)**을 자동으로 탐색하는 아키텍처 탐색(NAS) 파이프라인입니다.
+본 연구는 자율주행과 같이 소형 객체 비중이 높고 실시간 제약이 강한 엣지(Edge) 환경에서, 객체 탐지 모델의 정확도(mAP)와 지연 시간(Latency) 간의 최적 파레토 균형(Pareto Optimal)을 자동으로 탐색하는 아키텍처 탐색(NAS) 파이프라인입니다.
 
-기존 NAS의 막대한 하드웨어 실측 비용과 장시간 학습 병목을 해결하기 위해, **다중 충실도 평가(Multi-Fidelity Evaluation)**와 **불확실성 기반 능동 학습(Uncertainty-Aware Active Learning)**을 결합한 비동기 진화 알고리즘을 제안합니다.
+기존 NAS의 막대한 하드웨어 실측 비용과 장시간 학습 병목을 해결하기 위해, 다중 충실도 평가(Multi-Fidelity Evaluation)와 불확실성 기반 능동 학습(Uncertainty-Aware Active Learning)을 결합한 비동기 진화 알고리즘을 제안합니다.
 
 ---
 
@@ -98,21 +98,10 @@ python3 paper_logger.py
 ---
 
 ## 📊 Evaluation & Visualization
-`paper_logger.py` 실행 시 다음과 같은 논문용 시각화 결과를 획득할 수 있습니다.
+`paper_logger.py` 실행 시 다음과 같은 시각화 결과를 획득할 수 있습니다.
 1. **Population Distribution & Pareto Evolution:** 세대별 군집의 이동과 파레토 프론트의 향상 과정
 2. **Hypervolume Convergence:** Multi-seed 기반 2D Exact Hypervolume(HV) 수렴 신뢰구간
 3. **Ablation Study Table:** 제안 기법들(Multi-fidelity, Active Learning 등)의 기여도 분리 표
 
 ---
-
-## 📝 Citation
-(추후 논문 게재 시 Citation 정보 업데이트 예정)
-```bibtex
-@article{hw_aware_nas_yolo_2026,
-  title={Hardware-Aware Asynchronous Multi-Objective NAS Pipeline for Autonomous Driving},
-  author={Your Name},
-  journal={TBD},
-  year={2026}
-}
-```
 ```
