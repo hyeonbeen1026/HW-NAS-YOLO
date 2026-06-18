@@ -33,7 +33,7 @@
 HW-Aware-NAS-YOLO/
 ├── main_loop.py                 # (Core) NSGA-II 기반 메인 NAS 파이프라인 실행 스크립트
 ├── random_search_baseline.py    # (Baseline) 성능 비교를 위한 FAIR Random Search 실행 스크립트
-├── paper_logger.py              # (Log/Plot) DB 파싱 및 논문용 고화질 그래프/Ablation 표 추출기
+├── paper_logger.py              # (Log/Plot) DB 파싱 및 그래프/Ablation 표 추출기
 ├── evolution_engine.py          # NSGA-II 진화 엔진 및 하이퍼볼륨(HV) 계산 모듈
 ├── multi_fidelity_evaluator.py  # Ray 기반 비동기 병렬 분산 훈련/평가 매니저
 ├── latency_predictor.py         # RF 기반 지연 시간 예측기 및 Replay Buffer
@@ -89,7 +89,7 @@ python3 random_search_baseline.py
 > `random_search_cache.db`에 결과가 분리되어 저장됩니다.
 
 ### 3. Extract Paper Figures & Tables
-탐색이 완료된 데이터베이스에서 논문 첨부용 고화질 그래프(.pdf)와 Ablation Study 결과(.csv)를 추출합니다.
+탐색이 완료된 데이터베이스에서 그래프(.pdf)와 Ablation Study 결과(.csv)를 추출합니다.
 ```bash
 python3 paper_logger.py
 ```
@@ -104,4 +104,3 @@ python3 paper_logger.py
 3. **Ablation Study Table:** 제안 기법들(Multi-fidelity, Active Learning 등)의 기여도 분리 표
 
 ---
-```
